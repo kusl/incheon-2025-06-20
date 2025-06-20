@@ -23,6 +23,9 @@ builder.Services.AddDbContext<AnalyticsDbContext>(options =>
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 // --- Session Configuration ---
+// Add distributed memory cache. This is required by AddSession for its default DistributedSessionStore.
+builder.Services.AddDistributedMemoryCache();
+
 // Add session services to the DI container.
 // You might want to configure options like idle timeout or cookie settings here.
 builder.Services.AddSession(options =>
