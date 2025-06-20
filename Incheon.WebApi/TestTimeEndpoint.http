@@ -1,3 +1,7 @@
 ### Get Current UTC Time
 GET https://localhost:7151/api/Time
 Accept: application/json
+
+### Get All Analytics Events (DEBUG ONLY)
+GET https://localhost:7151/api/Time/events
+Accept: application/json
