@@ -1,7 +1,5 @@
 ﻿// Analytics.Data/Services/IAnalyticsService.cs
 using Analytics.Data.Models;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace Analytics.Data.Services
 {

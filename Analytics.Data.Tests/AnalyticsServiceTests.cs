@@ -4,10 +4,6 @@ using Analytics.Data.Models;
 using Analytics.Data.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite; // Add this using directive
-using Xunit;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Analytics.Data.Tests
 {

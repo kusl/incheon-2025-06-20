@@ -2,7 +2,6 @@
 using Analytics.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
-using System; // Make sure this is present for Guid
 
 namespace Analytics.Data.Context
 {

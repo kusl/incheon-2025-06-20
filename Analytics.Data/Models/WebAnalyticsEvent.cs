@@ -1,5 +1,4 @@
 ﻿// Analytics.Data/Models/WebAnalyticsEvent.cs
-using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace Analytics.Data.Models
