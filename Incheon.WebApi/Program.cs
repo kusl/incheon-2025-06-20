@@ -1,9 +1,9 @@
 // Incheon.WebApi/Program.cs
 using Analytics.Data.Context;
 using Analytics.Data.Services;
-using Incheon.WebApi.Middleware; // Add this using directive for your custom middleware
-using Microsoft.Data.Sqlite; // Add this using directive
-using Microsoft.EntityFrameworkCore; // Add this using directive
+using Incheon.WebApi.Middleware;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +21,16 @@ builder.Services.AddDbContext<AnalyticsDbContext>(options =>
 
 // Register the AnalyticsService
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
+
+// --- Session Configuration ---
+// Add session services to the DI container.
+// You might want to configure options like idle timeout or cookie settings here.
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30); // Set a reasonable idle timeout
+    options.Cookie.HttpOnly = true; // Make the session cookie inaccessible to client-side script
+    options.Cookie.IsEssential = true; // Mark the session cookie as essential for GDPR compliance
+});
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -47,11 +57,16 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// --- Session Middleware Registration ---
+// UseSession must be placed after UseRouting and UseAuthentication/UseAuthorization
+// if they are used, but before middleware that relies on session state.
+app.UseSession();
+
 // --- Custom Analytics Middleware Registration ---
 // Place this before app.MapControllers() to ensure it captures all requests
 app.UseMiddleware<RequestAnalyticsMiddleware>();
 
-app.UseAuthorization();
+app.UseAuthorization(); // This order is typically important: Authentication -> Authorization -> Session -> Endpoints
 
 app.MapControllers();
 
