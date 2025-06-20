@@ -35,6 +35,20 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true; // Mark the session cookie as essential for GDPR compliance
 });
 
+// --- CORS Configuration ---
+// Define a CORS policy that allows everything.
+// In a production environment, you should restrict this to known origins.
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        builder =>
+        {
+            builder.AllowAnyOrigin()    // Allow requests from any origin
+                   .AllowAnyMethod()    // Allow any HTTP method (GET, POST, PUT, DELETE, etc.)
+                   .AllowAnyHeader();   // Allow any HTTP header
+        });
+});
+
 // Add services to the container.
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -59,6 +73,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// --- CORS Middleware Registration ---
+// UseCors must be placed before UseRouting and UseAuthorization.
+app.UseCors("AllowAll"); // Apply the "AllowAll" CORS policy
 
 // --- Session Middleware Registration ---
 // UseSession must be placed after UseRouting and UseAuthentication/UseAuthorization
