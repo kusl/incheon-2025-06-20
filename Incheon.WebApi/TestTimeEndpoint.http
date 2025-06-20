@@ -1,0 +1,3 @@
+### Get Current UTC Time
+GET https://localhost:7151/api/Time
+Accept: application/json
