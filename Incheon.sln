@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Analytics.Data", "Analytics
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Analytics.Data.Tests", "Analytics.Data.Tests\Analytics.Data.Tests.csproj", "{474AE497-EF01-41BA-8F4A-8FD9A05C2ED2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Incheon.WebApi", "Incheon.WebApi\Incheon.WebApi.csproj", "{61252546-4608-4C57-A733-7B70B145EEA7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{474AE497-EF01-41BA-8F4A-8FD9A05C2ED2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{474AE497-EF01-41BA-8F4A-8FD9A05C2ED2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{474AE497-EF01-41BA-8F4A-8FD9A05C2ED2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{61252546-4608-4C57-A733-7B70B145EEA7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{61252546-4608-4C57-A733-7B70B145EEA7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{61252546-4608-4C57-A733-7B70B145EEA7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{61252546-4608-4C57-A733-7B70B145EEA7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
