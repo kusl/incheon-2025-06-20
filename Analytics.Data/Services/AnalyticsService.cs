@@ -12,18 +12,11 @@ namespace Analytics.Data.Services
         public AnalyticsService(AnalyticsDbContext context)
         {
             _context = context;
-            // Ensure the database schema is created.
-            // For in-memory, this effectively means creating the tables.
-            // For SQLite in-memory, this is important as no migrations are run.
-            _context.Database.EnsureCreated();
         }
 
         public async Task AddEventAsync(WebAnalyticsEvent analyticsEvent)
         {
-            if (analyticsEvent == null)
-            {
-                throw new ArgumentNullException(nameof(analyticsEvent));
-            }
+            ArgumentNullException.ThrowIfNull(analyticsEvent);
 
             _context.WebAnalyticsEvents.Add(analyticsEvent);
             await _context.SaveChangesAsync();
