@@ -12,15 +12,9 @@ namespace Incheon.WebApi.Controllers
     /// </summary>
     [ApiController]
     [Route("api/[controller]")] // Sets the base route for this controller to /api/Time
-    public class TimeController : ControllerBase
+    public class TimeController(IAnalyticsService analyticsService) : ControllerBase
     {
-        private readonly IAnalyticsService _analyticsService;
-
         // Inject the analytics service into the controller
-        public TimeController(IAnalyticsService analyticsService)
-        {
-            _analyticsService = analyticsService;
-        }
 
         /// <summary>
         /// Represents the JSON response for the current time.
@@ -63,7 +57,7 @@ namespace Incheon.WebApi.Controllers
         [ProducesResponseType(typeof(IEnumerable<WebAnalyticsEvent>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAnalyticsEvents()
         {
-            var events = await _analyticsService.GetAllEventsAsync();
+            var events = await analyticsService.GetAllEventsAsync();
             return Ok(events);
         }
     }

@@ -5,16 +5,11 @@ using Microsoft.Data.Sqlite;
 
 namespace Analytics.Data.Context
 {
-    public class AnalyticsDbContext : DbContext
+    public class AnalyticsDbContext(DbContextOptions<AnalyticsDbContext> options) : DbContext(options)
     {
         // Removed the static SqliteConnection here.
         // It's better to let the consumer (like the test fixture) manage the connection
         // for "pristine on every run" behavior.
-
-        public AnalyticsDbContext(DbContextOptions<AnalyticsDbContext> options)
-            : base(options)
-        {
-        }
 
         public DbSet<WebAnalyticsEvent> WebAnalyticsEvents { get; set; } = default!;
 
