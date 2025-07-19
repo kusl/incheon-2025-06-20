@@ -1,6 +1,6 @@
 @Incheon.WebApi_HostAddress = http://localhost:5102
 
-GET {{Incheon.WebApi_HostAddress}}/weatherforecast/
+GET {{Incheon.WebApi_HostAddress}}/api/weather
 Accept: application/json
 
 ###
