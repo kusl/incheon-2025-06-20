@@ -3,7 +3,7 @@ using Analytics.Data.Context;
 using Analytics.Data.Models;
 using Analytics.Data.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Data.Sqlite; // Add this using directive
+using Microsoft.Data.Sqlite;
 
 namespace Analytics.Data.Tests
 {
@@ -11,25 +11,23 @@ namespace Analytics.Data.Tests
     {
         private readonly AnalyticsDbContext _context;
         private readonly AnalyticsService _service;
-        private readonly SqliteConnection _connection; // Store the connection created by CreateInMemorySqliteOptions
+        private readonly SqliteConnection _connection;
 
         public AnalyticsServiceTests()
         {
-            // Use a unique name for each test class instance to ensure isolation.
-            // This allows tests to run in parallel without interfering with each other's in-memory DB.
-            var databaseName = Guid.NewGuid().ToString();
+            // Create and open a SQLite in-memory connection
+            // The connection must remain open for the in-memory database to persist
+            _connection = new SqliteConnection("DataSource=:memory:");
+            _connection.Open();
 
-            // Get the options, which now creates and opens a new connection
-            var options = AnalyticsDbContext.CreateInMemorySqliteOptions(databaseName);
-
-            // Store the connection for explicit disposal later
-            _connection = (SqliteConnection)options.Extensions.OfType<Microsoft.EntityFrameworkCore.Sqlite.Infrastructure.Internal.SqliteOptionsExtension>().FirstOrDefault()!.Connection!;
+            // Configure DbContext options to use this connection
+            var options = new DbContextOptionsBuilder<AnalyticsDbContext>()
+                .UseSqlite(_connection)
+                .Options;
 
             _context = new AnalyticsDbContext(options);
 
-            // Ensure the database is created and empty for each test run
-            // This is key for "pristine on every run" within the test fixture's lifecycle.
-            _context.Database.EnsureDeleted();
+            // Ensure the database is created
             _context.Database.EnsureCreated();
 
             _service = new AnalyticsService(_context);
@@ -83,15 +81,8 @@ namespace Analytics.Data.Tests
         // IDisposable for cleanup
         public void Dispose()
         {
-            _context.Dispose(); // Dispose the DbContext instance
-
-            // Explicitly close and dispose the SqliteConnection to ensure the in-memory database is truly gone.
-            // This is crucial for "pristine on every run" behavior between test methods.
-            if (_connection != null && _connection.State == System.Data.ConnectionState.Open)
-            {
-                _connection.Close();
-            }
-            _connection?.Dispose();
+            _context?.Dispose();
+            _connection?.Dispose(); // This will also close the connection
         }
     }
 }
