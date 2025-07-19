@@ -62,9 +62,10 @@ namespace Analytics.Data.Tests
 
             var clickEvents = await _service.GetEventsByEventTypeAsync("Click");
 
-            Assert.Equal(2, clickEvents.Count());
-            Assert.Contains(clickEvents, e => e.PageUrl == "/button1");
-            Assert.Contains(clickEvents, e => e.PageUrl == "/button2");
+            IEnumerable<WebAnalyticsEvent> webAnalyticsEvents = clickEvents.ToList();
+            Assert.Equal(2, webAnalyticsEvents.Count());
+            Assert.Contains(webAnalyticsEvents, e => e.PageUrl == "/button1");
+            Assert.Contains(webAnalyticsEvents, e => e.PageUrl == "/button2");
         }
 
         [Fact]
@@ -81,8 +82,8 @@ namespace Analytics.Data.Tests
         // IDisposable for cleanup
         public void Dispose()
         {
-            _context?.Dispose();
-            _connection?.Dispose(); // This will also close the connection
+            _context.Dispose();
+            _connection.Dispose(); // This will also close the connection
         }
     }
 }
