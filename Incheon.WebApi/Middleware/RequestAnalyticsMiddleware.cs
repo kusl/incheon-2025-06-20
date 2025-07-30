@@ -1,6 +1,7 @@
 ﻿// Incheon.WebApi/Middleware/RequestAnalyticsMiddleware.cs
 using Analytics.Data.Models;
 using Analytics.Data.Services;
+using System.Text.Json;
 
 namespace Incheon.WebApi.Middleware
 {
@@ -10,16 +11,17 @@ namespace Incheon.WebApi.Middleware
     public class RequestAnalyticsMiddleware
     {
         private readonly RequestDelegate _next;
-        // IAnalyticsService is resolved per request due to its Scoped lifetime
-        // and the middleware's InvokeAsync signature.
+        private readonly ILogger<RequestAnalyticsMiddleware> _logger;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RequestAnalyticsMiddleware"/> class.
         /// </summary>
         /// <param name="next">The next middleware in the pipeline.</param>
-        public RequestAnalyticsMiddleware(RequestDelegate next)
+        /// <param name="logger">Logger for error handling.</param>
+        public RequestAnalyticsMiddleware(RequestDelegate next, ILogger<RequestAnalyticsMiddleware> logger)
         {
             _next = next;
+            _logger = logger;
         }
 
         /// <summary>
@@ -29,51 +31,195 @@ namespace Incheon.WebApi.Middleware
         /// <param name="analyticsService">The analytics service to record the event, injected by DI.</param>
         public async Task InvokeAsync(HttpContext context, IAnalyticsService analyticsService)
         {
-            // Create a new WebAnalyticsEvent for the incoming request
-            var webAnalyticsEvent = new WebAnalyticsEvent
-            {
-                Timestamp = DateTime.UtcNow,
-                EventType = GetEventType(context.Request.Method), // Map HTTP method to an event type
-                PageUrl = context.Request.Path.ToString(),
-                // Attempt to get user ID (if authenticated) - adjust based on your authentication
-                UserId = context.User.Identity?.IsAuthenticated == true ? context.User.Identity.Name : "Anonymous",
-                SessionId = context.Session.Id, // Requires app.UseSession() in Program.cs if you want actual session IDs
-                UserAgent = context.Request.Headers["User-Agent"].ToString(),
-                IpAddress = context.Connection.RemoteIpAddress?.ToString(),
-                // You could add DataPayload for POST/PUT request bodies,
-                // but be careful with performance and sensitive data.
-                // For simplicity, we'll omit body logging here.
-            };
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            Exception? requestException = null;
 
             try
             {
-                // Add the event to the analytics database
-                await analyticsService.AddEventAsync(webAnalyticsEvent);
+                // Call the next middleware in the pipeline first
+                await _next(context);
             }
             catch (Exception ex)
             {
-                // Log the error without blocking the request pipeline.
-                // In a real application, you'd use a proper logger (e.g., ILogger<RequestAnalyticsMiddleware>).
-                Console.WriteLine($"Error recording analytics event: {ex.Message}");
+                requestException = ex;
+                throw; // Re-throw to maintain normal error handling
             }
-
-            // Call the next middleware in the pipeline
-            await _next(context);
+            finally
+            {
+                stopwatch.Stop();
+                
+                // Record analytics event regardless of success/failure
+                await RecordAnalyticsEventAsync(context, analyticsService, stopwatch.ElapsedMilliseconds, requestException);
+            }
         }
 
-        /// <summary>
-        /// Helper to map HTTP method to a more descriptive event type.
-        /// </summary>
-        private static string GetEventType(string httpMethod)
+        private async Task RecordAnalyticsEventAsync(
+            HttpContext context, 
+            IAnalyticsService analyticsService, 
+            long responseTimeMs,
+            Exception? requestException)
         {
-            return httpMethod.ToUpperInvariant() switch
+            try
+            {
+                // Skip recording for certain endpoints if needed
+                if (ShouldSkipAnalytics(context.Request.Path))
+                {
+                    return;
+                }
+
+                var webAnalyticsEvent = new WebAnalyticsEvent
+                {
+                    Timestamp = DateTime.UtcNow,
+                    EventType = GetEventType(context.Request.Method, context.Response.StatusCode),
+                    PageUrl = GetSanitizedUrl(context.Request),
+                    UserId = GetUserId(context),
+                    SessionId = GetSessionId(context),
+                    UserAgent = GetSanitizedUserAgent(context.Request.Headers["User-Agent"].ToString()),
+                    IpAddress = GetClientIpAddress(context),
+                    ReferrerUrl = context.Request.Headers["Referer"].ToString(),
+                    DataPayload = CreateDataPayload(context, responseTimeMs, requestException)
+                };
+
+                await analyticsService.AddEventAsync(webAnalyticsEvent);
+                
+                _logger.LogDebug("Analytics event recorded for {Method} {Path} - Status: {StatusCode}, Duration: {Duration}ms",
+                    context.Request.Method, context.Request.Path, context.Response.StatusCode, responseTimeMs);
+            }
+            catch (Exception ex)
+            {
+                // Log the error but don't let analytics failures affect the main request
+                _logger.LogError(ex, "Failed to record analytics event for {Method} {Path}", 
+                    context.Request.Method, context.Request.Path);
+            }
+        }
+
+        private static bool ShouldSkipAnalytics(PathString path)
+        {
+            // Skip analytics for certain paths to reduce noise
+            var pathValue = path.Value?.ToLowerInvariant();
+            return pathValue != null && (
+                pathValue.StartsWith("/health") ||
+                pathValue.StartsWith("/metrics") ||
+                pathValue.StartsWith("/favicon.ico") ||
+                pathValue.StartsWith("/_framework") ||
+                pathValue.StartsWith("/swagger")
+            );
+        }
+
+        private static string GetEventType(string httpMethod, int statusCode)
+        {
+            var baseType = httpMethod.ToUpperInvariant() switch
             {
                 "GET" => "PageView",
                 "POST" => "DataSubmission",
                 "PUT" => "DataUpdate",
                 "DELETE" => "DataDeletion",
+                "PATCH" => "DataPatch",
                 _ => "OtherRequest"
             };
+
+            // Add status code context
+            return statusCode >= 400 ? $"{baseType}_Error" : baseType;
+        }
+
+        private static string GetSanitizedUrl(HttpRequest request)
+        {
+            var url = $"{request.Path}{request.QueryString}";
+            
+            // Remove sensitive query parameters
+            if (request.QueryString.HasValue)
+            {
+                var sanitized = RemoveSensitiveQueryParams(url);
+                return sanitized.Length > 2048 ? sanitized[..2048] : sanitized;
+            }
+            
+            return url.Length > 2048 ? url[..2048] : url;
+        }
+
+        private static string RemoveSensitiveQueryParams(string url)
+        {
+            // Remove common sensitive parameters
+            var sensitiveParams = new[] { "password", "token", "key", "secret", "auth" };
+            var uri = new Uri($"http://dummy{url}"); // Dummy host for parsing
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            
+            foreach (var param in sensitiveParams)
+            {
+                if (query.AllKeys.Any(k => k?.Contains(param, StringComparison.OrdinalIgnoreCase) == true))
+                {
+                    var keysToRemove = query.AllKeys.Where(k => k?.Contains(param, StringComparison.OrdinalIgnoreCase) == true).ToList();
+                    foreach (var key in keysToRemove)
+                    {
+                        if (key != null) query.Remove(key);
+                    }
+                }
+            }
+            
+            var cleanQuery = query.Count > 0 ? $"?{query}" : "";
+            return $"{uri.LocalPath}{cleanQuery}";
+        }
+
+        private static string GetUserId(HttpContext context)
+        {
+            if (context.User.Identity?.IsAuthenticated == true)
+            {
+                return context.User.Identity.Name ?? "AuthenticatedUser";
+            }
+            return "Anonymous";
+        }
+
+        private static string? GetSessionId(HttpContext context)
+        {
+            try
+            {
+                return context.Session.Id;
+            }
+            catch
+            {
+                return null; // Session might not be available
+            }
+        }
+
+        private static string? GetSanitizedUserAgent(string userAgent)
+        {
+            if (string.IsNullOrEmpty(userAgent))
+                return null;
+                
+            return userAgent.Length > 512 ? userAgent[..512] : userAgent;
+        }
+
+        private static string? GetClientIpAddress(HttpContext context)
+        {
+            // Check for forwarded IP first (common in load balancer scenarios)
+            var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(forwardedFor))
+            {
+                return forwardedFor.Split(',')[0].Trim();
+            }
+
+            var realIp = context.Request.Headers["X-Real-IP"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(realIp))
+            {
+                return realIp;
+            }
+
+            return context.Connection.RemoteIpAddress?.ToString();
+        }
+
+        private static string CreateDataPayload(HttpContext context, long responseTimeMs, Exception? requestException)
+        {
+            var payload = new
+            {
+                ResponseTimeMs = responseTimeMs,
+                StatusCode = context.Response.StatusCode,
+                ContentType = context.Response.ContentType,
+                ContentLength = context.Response.ContentLength,
+                HasError = requestException != null,
+                ErrorType = requestException?.GetType().Name,
+                RequestSize = context.Request.ContentLength
+            };
+
+            return JsonSerializer.Serialize(payload);
         }
     }
 }
