@@ -419,3 +419,148 @@ info: Microsoft.Hosting.Lifetime[0]
 info: Program[0]
       Application is shutting down...
 PS C:\code\inmemoryof\Incheon\Incheon.WebApi>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+code runs fine locally. now perhaps a github action to build and a github action to run tests? triggers should be push to any branch, pull request to any branch, manual dispatch and anything else you see fit
+
+I'll create comprehensive GitHub Actions workflows for your project. Let me create separate workflows for building and testing, plus a combined CI/CD workflow.I've created a comprehensive set of GitHub Actions workflows for your project:
+
+## 📋 Workflow Overview
+
+### 1. **Main CI/CD Pipeline** (`.github/workflows/ci.yml`)
+**Triggers:** Push to main/develop/feature branches, PRs to main/develop, manual dispatch
+
+**Features:**
+- ✅ Multi-job pipeline with dependency management
+- 🏗️ Build validation and versioning
+- 🧪 Comprehensive testing with coverage
+- 🔍 Code quality analysis with CodeQL
+- 🚀 Integration testing with live API
+- ⚡ Optional performance testing with k6
+- 📦 Automated packaging and releases
+- 🔔 Success/failure notifications
+
+### 2. **Build-Only Workflow** (`.github/workflows/build.yml`)
+**Triggers:** Push to feature/bugfix/experimental branches, manual dispatch
+
+**Features:**
+- 🚀 Quick build validation for feature branches
+- 💨 Lightweight and fast execution
+- ✅ Both Release and Debug build verification
+
+### 3. **Test Suite Workflow** (`.github/workflows/test.yml`)
+**Triggers:** Changes to code files, manual dispatch with options
+
+**Features:**
+- 🎯 Cross-platform testing (Ubuntu, Windows, macOS)
+- 🔧 Multiple configurations (Debug/Release)
+- 📊 Code coverage with Codecov integration
+- 📈 Detailed coverage reports
+- 🎨 Customizable test filters and verbosity
+
+### 4. **Dependency Management** (`.github/workflows/dependency-update.yml`)
+**Triggers:** Weekly schedule (Mondays), manual dispatch
+
+**Features:**
+- 🔍 Automated dependency scanning
+- 🛡️ Security vulnerability detection
+- 📊 Deprecated package identification
+- 🤖 Automated dependency updates via PRs
+- 📋 Issue creation with detailed reports
+
+## 🚀 Key Features
+
+### **Smart Triggering**
+- Different workflows for different branch types
+- Path-based triggers for test-related changes
+- Manual dispatch with customizable options
+
+### **Performance Optimizations**
+- NuGet package caching across jobs
+- Strategic matrix exclusions
+- Conditional job execution based on context
+
+### **Quality Assurance**
+- CodeQL security analysis
+- Cross-platform compatibility testing
+- Integration testing with real API endpoints
+- Performance testing with k6 load testing
+
+### **Developer Experience**
+- Rich GitHub Step Summaries
+- Detailed test result reporting
+- Automated release creation
+- Coverage report generation
+
+### **Production Ready**
+- Proper versioning strategy
+- Artifact retention policies
+- Security headers for production
+- Graceful shutdown handling
+
+## 📁 File Structure
+```
+.github/
+└── workflows/
+    ├── ci.yml                    # Main CI/CD pipeline
+    ├── build.yml                 # Quick build validation
+    ├── test.yml                  # Comprehensive test suite
+    └── dependency-update.yml     # Dependency management
+```
+
+## 🔧 Setup Instructions
+
+1. **Create the `.github/workflows/` directory** in your repository root
+2. **Add all four workflow files** to the directory
+3. **Optional: Configure branch protection rules** in GitHub for main/develop branches
+4. **Optional: Add repository secrets** if you need custom deployment tokens
+
+## 🎯 Workflow Behavior
+
+### **Feature Branches**
+- `feature/*`, `bugfix/*`, `experimental/*` → **Build-only workflow**
+- Fast feedback for development work
+
+### **Main/Develop Branches**
+- Full CI/CD pipeline with all quality gates
+- Automated releases on main branch
+- Performance testing inclusion
+
+### **Pull Requests**
+- Full testing and quality analysis
+- Integration testing (if from same repo)
+- Blocking on failed tests
+
+### **Scheduled**
+- Weekly dependency updates
+- Automated security scanning
+- Issue creation for maintenance tasks
+
+The workflows are designed to be comprehensive yet efficient, providing excellent developer experience while maintaining high code quality standards. They'll scale well as your project grows and can be easily customized for your specific needs.

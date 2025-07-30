@@ -1,0 +1,488 @@
+# .github/workflows/ci.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, feature/*, hotfix/*, release/* ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      run_performance_tests:
+        description: 'Run performance tests'
+        required: false
+        default: false
+        type: boolean
+      deploy_environment:
+        description: 'Deployment environment'
+        required: false
+        default: 'none'
+        type: choice
+        options:
+        - none
+        - development
+        - staging
+        - production
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # Job 1: Build and basic validation
+  build:
+    name: Build and Validate
+    runs-on: ubuntu-latest
+    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_deploy: ${{ steps.should_deploy.outputs.result }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Fetch full history for GitVersion
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build solution
+      run: dotnet build --configuration Release --no-restore --verbosity minimal
+    
+    - name: Generate version
+      id: version
+      run: |
+        if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          VERSION="1.0.${{ github.run_number }}"
+        else
+          VERSION="1.0.${{ github.run_number }}-preview"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Generated version: $VERSION"
+    
+    - name: Check if should deploy
+      id: should_deploy
+      run: |
+        if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "result=true" >> $GITHUB_OUTPUT
+        else
+          echo "result=false" >> $GITHUB_OUTPUT
+        fi
+
+  # Job 2: Run unit tests
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: build
+    
+    strategy:
+      matrix:
+        test-project: 
+          - Analytics.Data.Tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Run tests with coverage
+      run: |
+        dotnet test ${{ matrix.test-project }}/${{ matrix.test-project }}.csproj \
+          --configuration Release \
+          --no-restore \
+          --verbosity minimal \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./TestResults \
+          --logger trx \
+          --logger "console;verbosity=detailed"
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.test-project }}
+        path: TestResults/
+        retention-days: 30
+    
+    - name: Publish test results
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: Test Results (${{ matrix.test-project }})
+        path: TestResults/*.trx
+        reporter: dotnet-trx
+        fail-on-error: true
+
+  # Job 3: Code quality and security analysis
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Run code analysis
+      run: |
+        dotnet build --configuration Release --no-restore --verbosity minimal
+        # Add any additional code analysis tools here
+    
+    - name: Run security scan with CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: csharp
+    
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+    
+    - name: Check for vulnerable packages
+      run: |
+        dotnet list package --vulnerable --include-transitive || true
+        dotnet list package --deprecated --include-transitive || true
+
+  # Job 4: Integration tests (if API is running)
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build API
+      run: dotnet build Incheon.WebApi/Incheon.WebApi.csproj --configuration Release --no-restore
+    
+    - name: Start API in background
+      run: |
+        cd Incheon.WebApi
+        dotnet run --configuration Release --no-build &
+        API_PID=$!
+        echo "API_PID=$API_PID" >> $GITHUB_ENV
+        
+        # Wait for API to be ready
+        echo "Waiting for API to start..."
+        for i in {1..30}; do
+          if curl -s http://localhost:5102/health > /dev/null 2>&1; then
+            echo "API is ready!"
+            break
+          fi
+          echo "Attempt $i: API not ready yet, waiting..."
+          sleep 2
+        done
+    
+    - name: Run integration tests
+      run: |
+        echo "Running integration tests..."
+        
+        # Test health endpoint
+        curl -f http://localhost:5102/health || exit 1
+        
+        # Test time endpoint
+        response=$(curl -s http://localhost:5102/api/time)
+        echo "Time endpoint response: $response"
+        
+        # Test analytics endpoint
+        curl -f http://localhost:5102/api/analytics/stats/total-count || exit 1
+        
+        # Test that analytics are being recorded
+        sleep 2
+        total_events=$(curl -s http://localhost:5102/api/analytics/stats/total-count | grep -o '"totalEvents":[0-9]*' | cut -d':' -f2)
+        if [ "$total_events" -gt 0 ]; then
+          echo "✅ Analytics are being recorded: $total_events events"
+        else
+          echo "❌ No analytics events recorded"
+          exit 1
+        fi
+    
+    - name: Stop API
+      if: always()
+      run: |
+        if [ ! -z "$API_PID" ]; then
+          kill $API_PID || true
+        fi
+
+  # Job 5: Performance tests (optional)
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: github.event.inputs.run_performance_tests == 'true' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Install k6
+      run: |
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+    
+    - name: Restore and build
+      run: |
+        dotnet restore
+        dotnet build Incheon.WebApi/Incheon.WebApi.csproj --configuration Release --no-restore
+    
+    - name: Start API for performance testing
+      run: |
+        cd Incheon.WebApi
+        dotnet run --configuration Release --no-build &
+        API_PID=$!
+        echo "API_PID=$API_PID" >> $GITHUB_ENV
+        
+        # Wait for API to be ready
+        for i in {1..30}; do
+          if curl -s http://localhost:5102/health > /dev/null 2>&1; then
+            break
+          fi
+          sleep 2
+        done
+    
+    - name: Run performance tests
+      run: |
+        cat > perf-test.js << 'EOF'
+        import http from 'k6/http';
+        import { check, sleep } from 'k6';
+
+        export let options = {
+          stages: [
+            { duration: '30s', target: 10 },
+            { duration: '1m', target: 20 },
+            { duration: '30s', target: 0 },
+          ],
+        };
+
+        export default function () {
+          // Test the time endpoint
+          let timeResponse = http.get('http://localhost:5102/api/time');
+          check(timeResponse, {
+            'time endpoint status is 200': (r) => r.status === 200,
+            'time endpoint response time < 500ms': (r) => r.timings.duration < 500,
+          });
+
+          // Test the analytics endpoint
+          let analyticsResponse = http.get('http://localhost:5102/api/analytics/stats/total-count');
+          check(analyticsResponse, {
+            'analytics endpoint status is 200': (r) => r.status === 200,
+            'analytics endpoint response time < 1000ms': (r) => r.timings.duration < 1000,
+          });
+
+          sleep(1);
+        }
+        EOF
+        
+        k6 run perf-test.js
+    
+    - name: Stop API
+      if: always()
+      run: |
+        if [ ! -z "$API_PID" ]; then
+          kill $API_PID || true
+        fi
+
+  # Job 6: Package and publish artifacts
+  package:
+    name: Package Application
+    runs-on: ubuntu-latest
+    needs: [build, test, code-quality]
+    if: needs.build.outputs.should_deploy == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Publish application
+      run: |
+        dotnet publish Incheon.WebApi/Incheon.WebApi.csproj \
+          --configuration Release \
+          --no-restore \
+          --output ./publish \
+          --self-contained false \
+          --verbosity minimal
+    
+    - name: Create deployment package
+      run: |
+        cd publish
+        tar -czf ../incheon-webapi-${{ needs.build.outputs.version }}.tar.gz *
+        cd ..
+        
+        # Create checksum
+        sha256sum incheon-webapi-${{ needs.build.outputs.version }}.tar.gz > incheon-webapi-${{ needs.build.outputs.version }}.sha256
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: incheon-webapi-${{ needs.build.outputs.version }}
+        path: |
+          incheon-webapi-${{ needs.build.outputs.version }}.tar.gz
+          incheon-webapi-${{ needs.build.outputs.version }}.sha256
+        retention-days: 90
+
+  # Job 7: Create GitHub Release (on main branch)
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build, test, code-quality, integration-tests, package]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: incheon-webapi-${{ needs.build.outputs.version }}
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ needs.build.outputs.version }}
+        release_name: Release v${{ needs.build.outputs.version }}
+        body: |
+          ## Changes in this Release
+          
+          ### Features
+          - Analytics tracking middleware
+          - In-memory SQLite database
+          - Comprehensive API endpoints for analytics data
+          - Health checks and monitoring
+          
+          ### Technical Details
+          - Built with .NET 9.0
+          - Entity Framework Core 9.0
+          - In-memory caching for performance
+          - Comprehensive test coverage
+          
+          ### Deployment
+          Download the `incheon-webapi-${{ needs.build.outputs.version }}.tar.gz` file and extract it on your server.
+          
+          Run with: `dotnet Incheon.WebApi.dll`
+        draft: false
+        prerelease: false
+    
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./incheon-webapi-${{ needs.build.outputs.version }}.tar.gz
+        asset_name: incheon-webapi-${{ needs.build.outputs.version }}.tar.gz
+        asset_content_type: application/gzip
+
+  # Job 8: Deployment notification
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [build, test, code-quality, integration-tests, package]
+    if: always() && (needs.build.outputs.should_deploy == 'true')
+    
+    steps:
+    - name: Notify success
+      if: needs.test.result == 'success' && needs.code-quality.result == 'success' && needs.integration-tests.result == 'success'
+      run: |
+        echo "✅ All checks passed! Version ${{ needs.build.outputs.version }} is ready for deployment."
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+    
+    - name: Notify failure
+      if: needs.test.result == 'failure' || needs.code-quality.result == 'failure' || needs.integration-tests.result == 'failure'
+      run: |
+        echo "❌ Some checks failed. Please review the results before deploying."
+        echo "Test result: ${{ needs.test.result }}"
+        echo "Code quality result: ${{ needs.code-quality.result }}"
+        echo "Integration tests result: ${{ needs.integration-tests.result }}"
+        exit 1

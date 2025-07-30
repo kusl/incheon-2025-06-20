@@ -1,0 +1,177 @@
+# .github/workflows/test.yml
+name: Test Suite
+
+on:
+  push:
+    paths:
+      - '**/*.cs'
+      - '**/*.csproj'
+      - '**/test**'
+  pull_request:
+    paths:
+      - '**/*.cs'
+      - '**/*.csproj'
+      - '**/test**'
+  workflow_dispatch:
+    inputs:
+      test_filter:
+        description: 'Test filter (optional)'
+        required: false
+        type: string
+      verbosity:
+        description: 'Test verbosity level'
+        required: false
+        default: 'normal'
+        type: choice
+        options:
+        - quiet
+        - minimal
+        - normal
+        - detailed
+        - diagnostic
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        configuration: [Debug, Release]
+        exclude:
+          # Reduce matrix for faster builds - only test Release on Linux and Windows
+          - os: macos-latest
+            configuration: Release
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.nuget/packages
+          ${{ github.workspace }}/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    
+    - name: Restore dependencies
+      run: dotnet restore --verbosity minimal
+    
+    - name: Build solution
+      run: dotnet build --configuration ${{ matrix.configuration }} --no-restore --verbosity minimal
+    
+    - name: Run tests with coverage
+      shell: bash
+      run: |
+        VERBOSITY="${{ github.event.inputs.verbosity || 'normal' }}"
+        FILTER="${{ github.event.inputs.test_filter }}"
+        
+        TEST_ARGS="--configuration ${{ matrix.configuration }} --no-build --verbosity $VERBOSITY"
+        
+        if [ ! -z "$FILTER" ]; then
+          TEST_ARGS="$TEST_ARGS --filter \"$FILTER\""
+        fi
+        
+        # Run tests with coverage collection
+        dotnet test Analytics.Data.Tests/Analytics.Data.Tests.csproj \
+          $TEST_ARGS \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./TestResults/${{ matrix.os }}-${{ matrix.configuration }} \
+          --logger trx \
+          --logger "console;verbosity=$VERBOSITY" \
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.configuration }}
+        path: TestResults/${{ matrix.os }}-${{ matrix.configuration }}/
+        retention-days: 30
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
+      with:
+        files: TestResults/${{ matrix.os }}-${{ matrix.configuration }}/**/coverage.opencover.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+    
+    - name: Generate coverage report
+      if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
+      run: |
+        dotnet tool install -g dotnet-reportgenerator-globaltool
+        reportgenerator \
+          "-reports:TestResults/${{ matrix.os }}-${{ matrix.configuration }}/**/coverage.opencover.xml" \
+          "-targetdir:CoverageReport" \
+          "-reporttypes:Html;TextSummary"
+        
+        echo "## Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        cat CoverageReport/Summary.txt >> $GITHUB_STEP_SUMMARY
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
+      with:
+        name: coverage-report
+        path: CoverageReport/
+        retention-days: 30
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    
+    steps:
+    - name: Download test results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: test-results-*
+        merge-multiple: true
+    
+    - name: Publish test results
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: Test Results Summary
+        path: '**/*.trx'
+        reporter: dotnet-trx
+        fail-on-error: true
+        max-annotations: 50
+    
+    - name: Test summary
+      if: always()
+      run: |
+        echo "## Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.test.result }}" == "success" ]; then
+          echo "✅ All tests passed across all platforms and configurations!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Some tests failed. Please check the detailed results above." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Matrix Results:" >> $GITHUB_STEP_SUMMARY
+        echo "- Ubuntu (Debug): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Ubuntu (Release): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Windows (Debug): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Windows (Release): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- macOS (Debug): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
