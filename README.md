@@ -236,3 +236,43 @@ Error (active)	NU1605	Warning As Error: Detected package downgrade: Microsoft.Ex
 Error (active)	NU1102	Unable to find package Microsoft.AspNetCore.Diagnostics.HealthChecks with version (>= 3.0.1)
   - Found 4 version(s) in nuget.org [ Nearest version: 2.2.0 ]
   - Found 0 version(s) in Microsoft Visual Studio Offline Packages	Incheon.WebApi	C:\code\inmemoryof\Incheon\Incheon.WebApi\Incheon.WebApi.csproj	1	
+
+
+
+
+
+
+
+
+
+
+
+
+Microsoft.AspNetCore.Diagnostics.HealthChecks is deprecated. 
+This package has been deprecated as it is legacy and is no longer maintained.
+Additional Details
+This package has been deprecated as part of the .NET Package Deprecation effort. You can learn more about it from https://github.com/dotnet/announcements/issues/217
+
+
+
+
+
+
+You're absolutely right! That package is deprecated. Let me fix the project file by removing that deprecated package. The health checks functionality is built into ASP.NET Core by default, so we don't need any additional packages.Perfect! The health checks functionality is already built into ASP.NET Core 9.0, so we don't need any additional packages. The `AddHealthChecks()` and `MapHealthChecks()` methods are available out of the box.
+
+If you want to add Entity Framework health checks later, you can use the official Microsoft package:
+
+```xml
+<PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="9.0.0" />
+```
+
+And then use:
+
+```csharp
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AnalyticsDbContext>();
+```
+
+But for now, the basic health checks endpoint at `/health` will work perfectly and return a simple "Healthy" status. You can always expand it later with custom health checks for your specific needs.
+
+The updated project files should now build without any deprecated package warnings!
