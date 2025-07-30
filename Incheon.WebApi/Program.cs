@@ -66,8 +66,7 @@ builder.Services.AddCors(options =>
 });
 
 // --- Health Checks ---
-builder.Services.AddHealthChecks()
-    .AddDbContextCheck<AnalyticsDbContext>("analytics_database");
+builder.Services.AddHealthChecks();
 
 // --- Logging Configuration ---
 builder.Logging.ClearProviders();
