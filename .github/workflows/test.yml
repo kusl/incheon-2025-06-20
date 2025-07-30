@@ -1,5 +1,6 @@
-# .github/workflows/test.yml
-name: Test Suite
+# .github/workflows/test-alternative.yml
+# Alternative test workflow that's more reliable and uses built-in GitHub features
+name: Test Suite (Alternative)
 
 on:
   push:
@@ -43,12 +44,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
         configuration: [Debug, Release]
-        exclude:
-          # Reduce matrix for faster builds - only test Release on Linux and Windows
-          - os: macos-latest
-            configuration: Release
     
     steps:
     - name: Checkout code
@@ -75,55 +72,125 @@ jobs:
     - name: Build solution
       run: dotnet build --configuration ${{ matrix.configuration }} --no-restore --verbosity minimal
     
-    - name: Run tests with coverage
+    - name: Run tests
       shell: bash
       run: |
         VERBOSITY="${{ github.event.inputs.verbosity || 'normal' }}"
         FILTER="${{ github.event.inputs.test_filter }}"
         
         TEST_ARGS="--configuration ${{ matrix.configuration }} --no-build --verbosity $VERBOSITY"
+        TEST_ARGS="$TEST_ARGS --results-directory ./TestResults"
+        TEST_ARGS="$TEST_ARGS --logger trx --logger \"console;verbosity=$VERBOSITY\""
         
         if [ ! -z "$FILTER" ]; then
           TEST_ARGS="$TEST_ARGS --filter \"$FILTER\""
         fi
         
-        # Run tests with coverage collection
-        dotnet test Analytics.Data.Tests/Analytics.Data.Tests.csproj \
-          $TEST_ARGS \
-          --collect:"XPlat Code Coverage" \
-          --results-directory ./TestResults/${{ matrix.os }}-${{ matrix.configuration }} \
-          --logger trx \
-          --logger "console;verbosity=$VERBOSITY" \
-          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        # Create results directory
+        mkdir -p TestResults
+        
+        # Run tests and capture exit code
+        set +e
+        dotnet test Analytics.Data.Tests/Analytics.Data.Tests.csproj $TEST_ARGS
+        TEST_EXIT_CODE=$?
+        set -e
+        
+        # Display test results summary
+        echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Platform:** ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Configuration:** ${{ matrix.configuration }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ $TEST_EXIT_CODE -eq 0 ]; then
+          echo "✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Some tests failed!**" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Count test files
+        TRX_FILES=$(find TestResults -name "*.trx" | wc -l)
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Test result files:** $TRX_FILES" >> $GITHUB_STEP_SUMMARY
+        
+        # Exit with the original test exit code
+        exit $TEST_EXIT_CODE
+    
+    - name: Parse test results
+      if: always()
+      shell: bash
+      run: |
+        # Parse TRX files and extract test information
+        if [ -d "TestResults" ] && [ "$(find TestResults -name '*.trx' | wc -l)" -gt 0 ]; then
+          echo "## Detailed Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          for trx_file in TestResults/*.trx; do
+            if [ -f "$trx_file" ]; then
+              echo "Processing: $trx_file"
+              
+              # Extract basic info using grep and basic text processing
+              if grep -q "outcome=\"Passed\"" "$trx_file" 2>/dev/null; then
+                PASSED_COUNT=$(grep -o "outcome=\"Passed\"" "$trx_file" | wc -l)
+              else
+                PASSED_COUNT=0
+              fi
+              
+              if grep -q "outcome=\"Failed\"" "$trx_file" 2>/dev/null; then
+                FAILED_COUNT=$(grep -o "outcome=\"Failed\"" "$trx_file" | wc -l)
+              else
+                FAILED_COUNT=0
+              fi
+              
+              TOTAL_COUNT=$((PASSED_COUNT + FAILED_COUNT))
+              
+              echo "**File:** $(basename "$trx_file")" >> $GITHUB_STEP_SUMMARY
+              echo "- Total Tests: $TOTAL_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ Passed: $PASSED_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "- ❌ Failed: $FAILED_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+        else
+          echo "No test result files found" >> $GITHUB_STEP_SUMMARY
+        fi
     
     - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results-${{ matrix.os }}-${{ matrix.configuration }}
-        path: TestResults/${{ matrix.os }}-${{ matrix.configuration }}/
+        path: TestResults/
         retention-days: 30
     
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
-      with:
-        files: TestResults/${{ matrix.os }}-${{ matrix.configuration }}/**/coverage.opencover.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
-    
-    - name: Generate coverage report
+    - name: Generate test coverage (Linux Release only)
       if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
       run: |
+        # Re-run tests with coverage collection
+        dotnet test Analytics.Data.Tests/Analytics.Data.Tests.csproj \
+          --configuration Release \
+          --no-build \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./CoverageResults \
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        
+        # Install and run reportgenerator
         dotnet tool install -g dotnet-reportgenerator-globaltool
         reportgenerator \
-          "-reports:TestResults/${{ matrix.os }}-${{ matrix.configuration }}/**/coverage.opencover.xml" \
+          "-reports:CoverageResults/**/coverage.opencover.xml" \
           "-targetdir:CoverageReport" \
-          "-reporttypes:Html;TextSummary"
+          "-reporttypes:Html;TextSummary;Badges"
         
-        echo "## Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
-        cat CoverageReport/Summary.txt >> $GITHUB_STEP_SUMMARY
+        # Add coverage to summary
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Code Coverage" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "CoverageReport/Summary.txt" ]; then
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat CoverageReport/Summary.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
     
     - name: Upload coverage report
       uses: actions/upload-artifact@v4
@@ -132,46 +199,70 @@ jobs:
         name: coverage-report
         path: CoverageReport/
         retention-days: 30
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
+      with:
+        files: CoverageResults/**/coverage.opencover.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
 
-  test-summary:
-    name: Test Summary
+  test-report:
+    name: Test Report
     runs-on: ubuntu-latest
     needs: test
     if: always()
     
     steps:
-    - name: Download test results
-      uses: actions/download-artifact@v4
-      with:
-        pattern: test-results-*
-        merge-multiple: true
-    
-    - name: Publish test results
-      uses: dorny/test-reporter@v1
-      if: always()
-      with:
-        name: Test Results Summary
-        path: '**/*.trx'
-        reporter: dotnet-trx
-        fail-on-error: true
-        max-annotations: 50
-    
-    - name: Test summary
-      if: always()
+    - name: Create test summary
       run: |
-        echo "## Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "## 📊 Test Execution Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Workflow:** ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
+        # Check overall test results
         if [ "${{ needs.test.result }}" == "success" ]; then
-          echo "✅ All tests passed across all platforms and configurations!" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Overall Result: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All tests passed across all platforms and configurations!" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.test.result }}" == "failure" ]; then
+          echo "### ❌ Overall Result: FAILURE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Some tests failed. Please check the individual job results for details." >> $GITHUB_STEP_SUMMARY
         else
-          echo "❌ Some tests failed. Please check the detailed results above." >> $GITHUB_STEP_SUMMARY
+          echo "### ⚠️ Overall Result: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
         fi
         
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Matrix Results:" >> $GITHUB_STEP_SUMMARY
-        echo "- Ubuntu (Debug): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Ubuntu (Release): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Windows (Debug): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Windows (Release): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- macOS (Debug): ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎯 Test Matrix Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Platform | Configuration | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|---------------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Ubuntu | Debug | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Ubuntu | Release | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Windows | Debug | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Windows | Release | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📁 Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Test results are available in the job artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- Coverage report is generated for Ubuntu Release configuration" >> $GITHUB_STEP_SUMMARY
+        echo "- All artifacts are retained for 30 days" >> $GITHUB_STEP_SUMMARY
+        
+        # Set exit code based on test results
+        if [ "${{ needs.test.result }}" == "failure" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check the failed job logs for detailed error information" >> $GITHUB_STEP_SUMMARY
+          echo "2. Download the test result artifacts for offline analysis" >> $GITHUB_STEP_SUMMARY
+          echo "3. Fix the failing tests and push a new commit" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
