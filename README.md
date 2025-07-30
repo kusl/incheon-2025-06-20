@@ -276,3 +276,146 @@ builder.Services.AddHealthChecks()
 But for now, the basic health checks endpoint at `/health` will work perfectly and return a simple "Healthy" status. You can always expand it later with custom health checks for your specific needs.
 
 The updated project files should now build without any deprecated package warnings!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PS C:\code\inmemoryof\Incheon\Incheon.WebApi> Set-Location "C:\code\inmemoryof\Incheon\"; git status; git remote show origin; git pull origin master; git status; dotnet clean; dotnet build; dotnet test; Set-Location "C:\code\inmemoryof\Incheon\Incheon.WebApi\"; dotnet run --configuration Release
+On branch master
+Your branch is ahead of 'origin/master' by 3 commits.
+  (use "git push" to publish your local commits)
+
+nothing to commit, working tree clean
+* remote origin
+  Fetch URL: git@github.com:kusl/incheon-2025-06-20.git
+  Push  URL: git@github.com:kusl/incheon-2025-06-20.git
+  HEAD branch: master
+  Remote branch:
+    master tracked
+  Local branch configured for 'git pull':
+    master merges with remote master
+  Local ref configured for 'git push':
+    master pushes to master (fast-forwardable)
+From github.com:kusl/incheon-2025-06-20
+ * branch            master     -> FETCH_HEAD
+Already up to date.
+On branch master
+Your branch is ahead of 'origin/master' by 3 commits.
+  (use "git push" to publish your local commits)
+
+nothing to commit, working tree clean
+You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy
+
+Build succeeded in 2.7s
+Restore complete (2.6s)
+You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy
+  Analytics.Data succeeded (8.3s) → Analytics.Data\bin\Debug\net9.0\Analytics.Data.dll
+  Analytics.Data.Tests succeeded (2.8s) → Analytics.Data.Tests\bin\Debug\net9.0\Analytics.Data.Tests.dll
+  Incheon.WebApi succeeded (4.8s) → Incheon.WebApi\bin\Debug\net9.0\Incheon.WebApi.dll
+
+Build succeeded in 16.6s
+Restore complete (1.8s)
+You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy
+  Analytics.Data succeeded (0.8s) → Analytics.Data\bin\Debug\net9.0\Analytics.Data.dll
+  Analytics.Data.Tests succeeded (0.3s) → Analytics.Data.Tests\bin\Debug\net9.0\Analytics.Data.Tests.dll
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.3+b1b99bdeb3 (64-bit .NET 9.0.7)
+[xUnit.net 00:00:00.99]   Discovering: Analytics.Data.Tests
+[xUnit.net 00:00:01.06]   Discovered:  Analytics.Data.Tests
+[xUnit.net 00:00:01.11]   Starting:    Analytics.Data.Tests
+[xUnit.net 00:00:04.45]   Finished:    Analytics.Data.Tests
+  Analytics.Data.Tests test succeeded (7.1s)
+
+Test summary: total: 8, failed: 0, succeeded: 8, skipped: 0, duration: 7.0s
+Build succeeded in 10.9s
+Using launch settings from C:\code\inmemoryof\Incheon\Incheon.WebApi\Properties\launchSettings.json...
+Building...
+Restore complete (1.3s)
+You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy
+  Analytics.Data succeeded (1.8s) → C:\code\inmemoryof\Incheon\Analytics.Data\bin\Release\net9.0\Analytics.Data.dll
+  Incheon.WebApi succeeded (2.7s) → bin\Release\net9.0\Incheon.WebApi.dll
+
+Build succeeded in 7.5s
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (18ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE TABLE "WebAnalyticsEvents" (
+          "Id" INTEGER NOT NULL CONSTRAINT "PK_WebAnalyticsEvents" PRIMARY KEY AUTOINCREMENT,
+          "Timestamp" TEXT NOT NULL,
+          "EventType" TEXT NOT NULL,
+          "UserId" TEXT NULL,
+          "SessionId" TEXT NULL,
+          "PageUrl" TEXT NULL,
+          "ReferrerUrl" TEXT NULL,
+          "UserAgent" TEXT NULL,
+          "IpAddress" TEXT NULL,
+          "DataPayload" TEXT NULL
+      );
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE INDEX "IX_WebAnalyticsEvents_EventType" ON "WebAnalyticsEvents" ("EventType");
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE INDEX "IX_WebAnalyticsEvents_SessionId" ON "WebAnalyticsEvents" ("SessionId");
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE INDEX "IX_WebAnalyticsEvents_Timestamp" ON "WebAnalyticsEvents" ("Timestamp");
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE INDEX "IX_WebAnalyticsEvents_UserId" ON "WebAnalyticsEvents" ("UserId");
+info: Program[0]
+      Analytics database initialized successfully
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://0.0.0.0:5102
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: C:\code\inmemoryof\Incheon\Incheon.WebApi
+warn: Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware[3]
+      Failed to determine the https port for redirect.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (15ms) [Parameters=[@p0='?' (Size = 160), @p1='?' (Size = 8), @p2='?' (Size = 9), @p3='?' (Size = 9), @p4='?', @p5='?' (Size = 36), @p6='?' (DbType = DateTime), @p7='?' (Size = 80), @p8='?' (Size = 9)], CommandType='Text', CommandTimeout='30']
+      INSERT INTO "WebAnalyticsEvents" ("DataPayload", "EventType", "IpAddress", "PageUrl", "ReferrerUrl", "SessionId", "Timestamp", "UserAgent", "UserId")
+      VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+      RETURNING "Id";
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT "w"."Id", "w"."DataPayload", "w"."EventType", "w"."IpAddress", "w"."PageUrl", "w"."ReferrerUrl", "w"."SessionId", "w"."Timestamp", "w"."UserAgent", "w"."UserId"
+      FROM "WebAnalyticsEvents" AS "w"
+      ORDER BY "w"."Timestamp" DESC
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 161), @p1='?' (Size = 8), @p2='?' (Size = 9), @p3='?' (Size = 16), @p4='?', @p5='?' (Size = 36), @p6='?' (DbType = DateTime), @p7='?' (Size = 80), @p8='?' (Size = 9)], CommandType='Text', CommandTimeout='30']
+      INSERT INTO "WebAnalyticsEvents" ("DataPayload", "EventType", "IpAddress", "PageUrl", "ReferrerUrl", "SessionId", "Timestamp", "UserAgent", "UserId")
+      VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+      RETURNING "Id";
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 159), @p1='?' (Size = 8), @p2='?' (Size = 9), @p3='?' (Size = 9), @p4='?', @p5='?' (Size = 36), @p6='?' (DbType = DateTime), @p7='?' (Size = 80), @p8='?' (Size = 9)], CommandType='Text', CommandTimeout='30']
+      INSERT INTO "WebAnalyticsEvents" ("DataPayload", "EventType", "IpAddress", "PageUrl", "ReferrerUrl", "SessionId", "Timestamp", "UserAgent", "UserId")
+      VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+      RETURNING "Id";
+info: Microsoft.Hosting.Lifetime[0]
+      Application is shutting down...
+info: Program[0]
+      Application is shutting down...
+PS C:\code\inmemoryof\Incheon\Incheon.WebApi>
